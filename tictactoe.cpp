@@ -1,344 +1,314 @@
-// Example program
 #include <iostream>
 #include <string>
 #include <functional>
+#include <map>
+#include <stdlib.h>
 using namespace std;
 
-//board size
-const int b = 3;
-//make empty board
-int board[b][b] = {};
-//row, col, and diagonal sum arrays
-int rowSum[b] = {}, colSum[b] = {}, diagSum[2] = {};
-//who won (if 0 game not over), if -1 tie
-int winner = 0;
-// true if person plays first
-bool personFirst = false;
-// true if first turn of computer/ai
-bool first = true;
-// keep track of number of turns if there’s a tie
-int turns = 0;
+// tic tac toe board
+template <unsigned int B>
+class TTTB {
+	public:
+		const string PL, CL; // person letter, computer letter (X or O)
+		const bool ODD; // is the board size odd?
+		const int PN, CN; // board size, person number, computer number
+		int board[B][B] = {}, colSum[B] = {}, rowSum[B] = {}, diagSum[2] = {};
 
-//translate number into X, O or empty
-char translate(int n) {
-    if (n == 1) { //person is X
-        return 'X';    
-    } else if (n == 10) {
-        return  'O'; //computer is O
-    } else {
-        return ' ';    
-    }
+		int winner; // winner = who won (1 = person, 10 = computer); 0 = game not over (or tie if @ B*B iterations); -1 = something broke
+		bool person_playing; // is the person currently playing? (false if computer playing)
+
+		TTTB<B>(string pl, string cl, bool pp, int pn=1, int cn=10, bool odd=((B%2)!=0)) : 
+				PL(pl), CL(cl), person_playing(pp), PN(pn), CN(cn), ODD(odd) {
+			winner=0;
+		}
+
+		// translate number into X, O or empty
+		string translate(int n) {
+		    if (n == PN) {
+		        return PL;    
+		    } else if (n == CN) {
+		        return CL;
+		    } else {
+		        return " ";
+		    }
+		}
+
+		// prints the board
+		void printBoard() {
+			string dashes = " -";
+			for (int i = 0; i < B; i++) {
+			      dashes += "----";
+			}
+
+		    cout << dashes << endl;
+		    for (int r = 0; r < B; r++) {
+		        cout << " | ";
+		        for (int c = 0; c < B; c++) {
+		            cout << translate(board[r][c]) << " | ";
+		        }
+		        cout << endl;
+		        cout << dashes << endl;
+		    }
+		}
+
+		// update sum arrays after new value added
+		void updateSum(int r, int c, int adding) {
+			cout << "row" << r << "col" << c << "adding" << adding << endl;
+
+		    rowSum[r] += adding;
+		    colSum[c] += adding;
+
+		    if (r==c) {
+				diagSum[0] += adding;
+				cout << "diagsum" << diagSum[0] << endl;
+				if (ODD and r==(B/2)) { // if board size is odd and middle box chosen
+					diagSum[1] += adding;
+				}
+			} else if ((r+c)==(B-1)) {
+				diagSum[1] += adding;
+			}
+
+		    for (int i = 0; i < B; i++) {
+		        cout << "rowSum " << i + 1 << " is: " << rowSum[i] << endl;
+   		        cout << "colSum " << i + 1 << " is: " << colSum[i] << endl;
+
+		    }
+
+		    for (int i = 0; i < 2; i++) {
+		        cout << "diagSum " << i << " is: " << diagSum[i] << endl; // diag0 is \ (- slope) diag1 is / (+ slope)
+		    }
+		}
+
+		// gets input from person and updates board and sum arrays, then sets "person" boolean to false
+		void person() {
+			cout << "person()" << endl;
+
+			int row, col;
+
+			bool error = false;
+
+			do {
+				if (error) {
+					cout << "either your input was invalid or something was already there. try again." << endl;
+				}
+
+				cout << "row (please enter a number between 1 and " << B << "): ";
+				cin >> row;
+				cout << "column (please enter a number between 1 and " << B << "): ";
+				cin >> col;
+
+				error = true;
+			} while (row > B or col > B or row < 1 or col < 1 or board[--row][--col] != 0); 
+			// indices have range [0,B-1] & user input has range [1,B]
+
+			cout << "you chose (" << row << ", " << col << ")" << endl;
+
+			board[row][col] = PN;
+			updateSum(row, col, PN);
+
+			person_playing=false;
+		}
+
+		// if row or col or diag sum == person#*boardsize => person won
+		// if row or col or diag sum == comp#*boardsize => computer won
+		void checkForWinner() {
+			for (int i = 0; i < B; i++) {
+				if (rowSum[i]==PN*B or colSum[i]==PN*B) {
+					winner = PN;
+					return;
+				} else if (rowSum[i]==CN*B or colSum[i]==CN*B) {
+					winner = CN;
+					return;
+				}
+		    }
+
+		    for (int i = 0; i < 2; i++) {
+		    	if (diagSum[i]==PN*B) {
+					winner = PN;
+					return;
+				} else if (diagSum[i]==CN*B) {
+					winner = CN;
+					return;
+				}
+		    }
+		}
+
+		// find empty spot in given row
+		void compRow(int r) {
+			for (int c = 0; c < B; c++) {
+				if (board[r][c]==0) {
+					board[r][c] = CN;
+					updateSum(r,c,CN);
+					return;
+				}
+			}
+			winner = -1; //something broke (probably there was supposed to be a tie)
+		}
+
+		// find empty spot in given column
+		void compCol(int c) {
+			for (int r = 0; r < B; r++) {
+				if (board[r][c]==0) {
+					board[r][c] = CN;
+					updateSum(r,c,CN);
+					return;
+				}
+			}
+			winner = -1; //something broke (probably there was supposed to be a tie)
+		}
+
+		// find empty spot in given diagonal
+		void compDiag(int d) {
+			if (d==0) { // diagonal with - slope (\)
+				for (int rc = 0; rc < B; rc++) {
+					if (board[rc][rc]==0) {
+						board[rc][rc] = CN;
+						updateSum(rc,rc,CN);
+						return;
+					}
+				}
+			} else { // diagonal with + slope (/)
+				int c;
+				for (int r = 0; r < B; r++) {
+					c = B - 1 - r;
+					if(board[r][c]==0) {
+						board[r][c] = CN;
+						updateSum(r,c,CN);
+						return;
+					}
+				}
+			}
+			winner = -1; //something broke (probably supposed to be a tie)
+		}
+
+		void computer() {
+			person_playing = true;
+
+			map<int,int> rows;
+			map<int,int> cols;
+			map<int,int> diags;
+
+			for (int i = 0; i < B; i++) {
+				int rs = rowSum[i], cs = colSum[i];
+				int ds;
+
+				cout << "rs " << rs << " cs " << cs << endl;
+
+				// check diagonals if i < 2 (only two diagonal sums)
+				if (i < 2) {
+					ds = diagSum[i];
+					diags.insert({ds,i}); //only need one instance of each sum
+				}
+
+				// check if computer can win (i.e. computer only needs one more spot)
+				if (rs == (B-1)*CN) {
+					cout << "computer can win; rs = " << endl;
+					compRow(i);
+					return;
+				} else if (cs == (B-1)*CN) {
+					cout << "computer can win; cs = " << endl;
+					compCol(i);
+					return;
+				} else if (i < 2 and ds == (B-1)*CN) {
+					cout << "computer can win; ds = " << endl;
+					compDiag(i);
+					return;
+				} else if (rs == (B-1)*PN) { //check if person can win; if they can, block them
+					cout << "checking if person can win; rs = " << rs << endl;
+					compRow(i);
+					return;
+				} else if (cs == (B-1)*PN) {
+					cout << "checking if person an win; cs = " << cs << endl;
+					compCol(i);
+					return;
+				} else if (i < 2 and ds == (B-1)*PN) {
+					cout << "checking if person can win; ds = " << ds << endl;
+					compDiag(i);
+					return;
+				}
+
+				rows.insert({rs,i}); //only need one instance of each sum
+				cols.insert({cs,i}); //only need one instance of each sum
+			}
+
+			// get row or col or diag with greatest number of computer placed letters and run that
+			for (int i = B-2; i >= 0; i--) {
+				if (rows.count(i*CN)) {
+					compRow(rows.at(i*CN));
+					return;
+				} else if (cols.count(i*CN)) {
+					compCol(cols.at(i*CN));
+					return;
+				} else if (diags.count(i*CN)) {
+					compDiag(diags.at(i*CN));
+					return;
+				}
+			}
+
+			// computer can't win; try to keep the person from winning
+			// get row or col or diag with greatest number of person placed letters and place something there
+			for (int i = B-2; i >= 0; i--) {
+				if (rows.count(i*PN)) {
+					compRow(rows.at(i*PN));
+					return;
+				} else if (cols.count(i*PN)) {
+					compCol(cols.at(i*PN));
+					return;
+				} else if (diags.count(i*PN)) {
+					compDiag(diags.at(i*PN));
+					return;
+				}
+			}
+
+			// there should be no reason you reach this point 
+			// if you do, something is probably broken
+			// just pick something random
+			int randRow = -1, randCol = -1, iterations = 0, MAX_ITERS=10000;
+			do {
+				randRow = rand() % B;
+				randCol = rand() % B;
+				iterations++;
+			} while (board[randRow][randCol] != 0 and iterations < MAX_ITERS);
+
+			if (iterations==MAX_ITERS) { //something broke even more (supposed to be a tie probably)
+				winner = -1;
+				return;
+			}
+
+			board[randRow][randCol] = CN;
+			updateSum(randRow, randCol, CN);
+
+		}
+
+		// returns who wins
+		void game() {
+			cout << "game()" << endl;
+
+			if (person_playing) { // if person is playing
+				person();
+			} else { // computer is playing
+				computer();
+			}
+
+			checkForWinner();
+		}
+};
+
+int main() {
+	const int b = 5;
+
+	cout << "hello world 0" << endl;
+	TTTB<b> ttt = TTTB<b>("X", "O", true);
+	
+	int iters = 0;
+
+	do {
+		ttt.game();
+		ttt.printBoard();
+		iters++;
+	} while (not ttt.winner and iters < b*b); // do this while there is no winner (i.e. while winner == 0)
+	// or before max iterations reached (iters = board_size squared => board full => tie)
+	cout << "winner" << ttt.winner << endl;
+	cout << "hello world 1" << endl;
+	return 0;
 }
-
-// print the board
-void printBoard() {
-    cout << "  -----------" << endl;
-    for (int r = 0; r < 3; r++) {
-        cout << " | ";
-        for (int c = 0; c < 3; c++) {
-            cout << translate(board[r][c]) << " | ";
-        }
-        cout << endl;
-        cout << "  -----------" << endl;
-    }
-}
-
-// update sum arrays after new value added
-void updateSum(int r, int c, int adding) {
-    rowSum[r] += adding;
-    colSum[c] += adding;
-    if ((r-c)==0) {
-        diagSum[0] += adding;
-    } 
-    if ((r+c)==(b-1)) {
-        diagSum[1] += adding;
-    }
-    cout << "rows" << endl;
-    for (int i = 0; i < b; i++) {
-        cout << "index " << i << " is: " << rowSum[i] << endl;
-    }
-    cout << "cols" << endl;
-    for (int i = 0; i < b; i++) {
-        cout << "index " << i << " is: " << colSum[i] << endl;
-    }
-    cout << "diags" << endl;
-    for (int i = 0; i < 2; i++) {
-        cout << "index " << i << " is: " << diagSum[i] << endl;
-    }
-}
-
-// check if sum means person or AI won; bool is true if person is playing
-// called by checkBoard
-bool checkSum(int sum, bool person) {
-    if (person) {
-        if (sum == 3) {
-            winner = 1;
-            cout << "YOU WON!!!";
-            return true;
-        }
-    } else {
-        if (sum == 30) {
-            winner = 10;
-            cout << "THE AI BEAT YOU HAHA LOL" << endl;
-            return true;
-        }
-    }
-    return false;
-}
-
-// return true if someone won
-bool checkBoard(bool person) {
-    // check horizontals
-    for (int sum : rowSum) {
-        if (checkSum(sum, person)) {
-            return true;
-        }
-    }
-
-    // check verticals
-    for (int sum : colSum) {
-        if (checkSum(sum, person)) {
-            return true;
-        }
-    }
-   
-    // check diagonals
-    for (int sum : diagSum) {
-        if (checkSum(sum, person)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// returns true if the AI placed an O (in an empty spot)
-// check means are you looking for Xs (1) or Os (10)
-// m means are you looking two in a row or one in a row with the rest empty
-bool check(int check, int m) {
-    int sum = 0;
-    // check diagonals
-    sum = diagSum[0];
-    if (sum==check*m) {
-        for (int rc = 0; rc < b; rc++) {
-            if (board[rc][rc] == 0) {
-                board[rc][rc] = 10;
-                updateSum(rc, rc, 10);
-                cout << "check diag 1 The AI placed an O at row " << rc + 1 << " and column " << rc + 1 << "." << endl;
-                return true;
-            }
-        }
-    }
-    sum = diagSum[1];
-    if (sum==check*m) {
-        for (int r = 0; r < b; r++) {
-            int c = b - r - 1;
-            if (board[r][c] == 0) {
-                board[r][c] = 10;
-                updateSum(r, c, 10);
-                cout << "check diag 2 The AI placed an O at row " << r + 1 << " and column " << c + 1 << "." << endl;
-                return true;
-            }
-        }
-    }
-
-    // check horizontals; i is the index of the row array and the index of its sum in rowSum
-    sum = 0;
-    for (int r = 0; r < b; r++) {
-        sum = rowSum[r];
-        cout << "sum is " << sum << " and check*m is " << check*m << endl;
-        if (sum==check*m) {
-            for (int c = 0; c < b; c++) {
-                if (board[r][c] == 0) {
-                    // put an O here 
-                    board[r][c] = 10;
-                    updateSum(r, c, 10);
-                    cout << "check row The AI placed an O at row " << r + 1 << " and column " << c + 1 << "." << endl;
-                    return true;
-                }
-            }
-        }
-    }
-    // check verticals
-    for (int c = 0; c < b; c++) {
-        sum = colSum[c];
-        if (sum==check*m) {
-            for (int r = 0;  r < b; r++) {
-                if (board[r][c] == 0) {
-                    board[r][c] = 10;
-                    updateSum(r, c, 10);
-                    cout << "check vert The AI placed an O at row " << r + 1 << " and column " << c + 1 << "." << endl;
-                    return true;
-                }
-            }
-        }
-    }
-   
-    return false;
-}
-
-bool secret() {
-    if (b==3 && !personFirst) {
-        int sum = diagSum[0];
-        if (sum==11) {
-            for (int rc = 0; rc < b; rc++) {
-                if (board[rc][rc] == 0) {
-                    board[rc][rc] = 10;
-                    updateSum(rc, rc, 10);
-                    cout << "The AI placed an O at row " << rc + 1 << " and column " << rc + 1 << "." << endl;
-                    return true;
-                }
-            }
-        }
-        sum = diagSum[1];
-        if (sum==11) {
-            for (int r = 0; r < b; r++) {
-                int c = b - r - 1;
-                if (board[r][c] == 0) {
-                    board[r][c] = 10;
-                    updateSum(r, c, 10);
-                    cout << "The AI placed an O at row " << r + 1 << " and column " << c + 1 << "." << endl;
-                    return true;
-                }
-            }
-        }
-    }  
-    return false;
-}
-
-// returns true if AI wins
-bool ai() {
-    cout << "ai on" << endl;
-    if (first) {
-        int rc = b/2;
-        if (board[rc][rc] == 0) {
-            board[rc][rc] = 10;
-            updateSum(rc, rc, 10);
-            cout << "The AI placed an O at row " << rc + 1 << " and column " << rc + 1 << "." << endl;
-        } else {
-            int row =  (rand() % 2)*(b-1);
-            int col = (rand() % 2)*(b-1);
-            board[row][col] = 10;
-            updateSum(row, col, 10);
-            cout <<  "The AI placed an O at row " << row + 1 << " and column " << col + 1 << "." << endl;
-        }
-        first = false;
-        return false;
-    }
-    if(check(1, 2)) { //the ai played
-        cout << "check 1 2" << endl;
-        return false;
-    }
-    if(check(10, 2)) { //the ai won
-        cout << "check 10 2" << endl;
-        winner = 10;
-        cout << "THE AI BEAT YOU HAHA LOL" << endl;
-        return true;
-    }
-    if (secret()) {
-        return false;    
-    }
-    if (check(10, 1)) {
-        return false;
-    }
-    return false; //the ai didn’t win
-}
-
-// returns true if person won
-bool person() {
-    //get row input
-    string r;
-    cout << "row: ";
-    getline (cin, r);
-    int row = atoi(r.c_str());
-    row = row - 1;    
-
-    //get col input
-    string c;
-    cout << "column: ";
-    getline (cin, c);
-    int col = atoi(c.c_str());
-    col = col - 1;
-
-    // check if valid input
-    if (row >= 0 && row <= (b-1) && col >= 0 && col <= (b-1) && board[row][col] == 0) {
-        //update board
-        board[row][col] = 1;
-        //update sum array
-        updateSum(row, col, 1);
-    } else {
-        // request new user input
-        cout << "invalid input or there’s something there. please try again" << endl;
-        person();
-    }
-    
-    //print board
-    printBoard();
-    
-    //checks if player won
-    if(checkBoard(true)) {
-        return true;
-    }
-    return false;
-}
-
-void play() {
-    if (personFirst) {
-        //calls person to play
-        if(person()) {
-            return;
-        }
-        turns++; //there was one more turn
-        cout << "turns " << turns << endl;
-        if (turns == b*b) {
-            printBoard();
-            winner = -1;
-            return;
-        }
-        //calls AI to play; prints board; returns if AI won
-        if(ai()) {
-            printBoard();
-            return;
-        }
-        turns++;
-        cout << "turns " << turns << endl;
-        if (turns == b*b) {
-            printBoard();
-            winner = -1;
-            return;
-        }
-        printBoard();  
-    } else {
-       //calls AI to play; prints board; returns if AI won
-        if(ai()) {
-            printBoard();
-            return;
-        }
-        turns++;
-        if (turns == b*b) {
-            printBoard();
-            winner = -1;
-            return;
-        }
-        printBoard();    
-
-        //calls person to play
-        if(person()) {
-            return;
-        }
-        turns++;
-        if (turns == b*b) {
-            printBoard();
-            winner = -1;
-            return;
-        }
-    }
-}
-
-int main() {  
-    printBoard();
-    while (winner==0) {
-        play();
-    }
-}
-
-
